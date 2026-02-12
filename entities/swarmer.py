@@ -7,7 +7,8 @@ from settings import *
 
 class Swarmer(Entity):
     def __init__(self, game, x, y):
-        super().__init__(game, x, y, (255, 255, 0), "triangle")
+        # Utilise le type "flagellate" (spermatozoïde/tétard)
+        super().__init__(game, x, y, (255, 255, 0), "flagellate")
         self.speed = 3.5
         self.size = 8
         self.state = "passive"
@@ -38,10 +39,10 @@ class Swarmer(Entity):
 
         if neighbors >= 2:
             self.state = "aggressive"
-            self.color = (255, 50, 0)
+            self.color = (255, 100, 50)  # Orange plus organique
         else:
             self.state = "passive"
-            self.color = (255, 255, 0)
+            self.color = (200, 200, 50)  # Jaune sale
 
         if self.state == "aggressive":
             px, py = self.game.player.pos
@@ -49,7 +50,12 @@ class Swarmer(Entity):
 
             if dist_p > 25:
                 target_angle = math.atan2(py - self.y, px - self.x)
-                self.angle = target_angle
+                # Lissage de la rotation pour un effet nage plus naturel
+                diff = target_angle - self.angle
+                while diff > math.pi: diff -= 2 * math.pi
+                while diff < -math.pi: diff += 2 * math.pi
+                self.angle += diff * 0.1
+
                 self.move(math.cos(self.angle) * self.speed, math.sin(self.angle) * self.speed)
 
         elif self.state == "passive":

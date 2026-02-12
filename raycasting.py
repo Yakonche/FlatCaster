@@ -1,19 +1,132 @@
 # raycasting.py
 import pygame
 import math
+import moderngl
 import numpy as np
 from settings import *
 from geometry import WALL_TYPES
-from colors import *
+from colors import RED_WALL, GREEN_WALL, BLUE_WALL, PURPLE_WALL, ORANGE_WALL, WHITE
 
-FOV_CONE_COLOR = (200, 200, 200, 40)
+
+def get_shader_source():
+    return f"""
+    #version 430
+    layout(local_size_x = 16, local_size_y = 1) in;
+
+    layout(std430, binding = 0) buffer MapData {{
+        float segmentData[];
+    }};
+
+    layout(std430, binding = 1) buffer OutputBuffer {{
+        float renderData[]; 
+    }};
+
+    layout(std430, binding = 2) buffer HitBuffer {{
+        vec4 hitData[];
+    }};
+
+    uniform vec2 playerTilePos;
+    uniform float playerAngle;
+    uniform int numSegments;
+    uniform int numRays;
+    uniform float fov;
+    uniform float halfFov;
+    uniform float tileSize;
+    uniform float screenWidth;
+    uniform float scale;
+
+    vec3 getWallColor(int wallType) {{
+        if (wallType == 1) return vec3({RED_WALL[0] / 255.0}, {RED_WALL[1] / 255.0}, {RED_WALL[2] / 255.0});
+        if (wallType == 2) return vec3({GREEN_WALL[0] / 255.0}, {GREEN_WALL[1] / 255.0}, {GREEN_WALL[2] / 255.0});
+        if (wallType == 3) return vec3({BLUE_WALL[0] / 255.0}, {BLUE_WALL[1] / 255.0}, {BLUE_WALL[2] / 255.0});
+        if (wallType == 4) return vec3({PURPLE_WALL[0] / 255.0}, {PURPLE_WALL[1] / 255.0}, {PURPLE_WALL[2] / 255.0});
+        if (wallType == 5) return vec3({ORANGE_WALL[0] / 255.0}, {ORANGE_WALL[1] / 255.0}, {ORANGE_WALL[2] / 255.0});
+        return vec3(1.0);
+    }}
+
+    void main() {{
+        uint ray = gl_GlobalInvocationID.x;
+        if (ray >= numRays) return;
+
+        float deltaAngle = fov / float(numRays);
+        float rayAngle = playerAngle - halfFov + float(ray) * deltaAngle;
+
+        vec2 dir = vec2(cos(rayAngle), sin(rayAngle));
+
+        float minDist = 5000.0;
+        int hitColorType = 0;
+        float hitNormalMod = 1.0;
+
+        for (int i = 0; i < numSegments; i++) {{
+            int idx = i * 5;
+            vec2 A = vec2(segmentData[idx], segmentData[idx+1]);
+            vec2 B = vec2(segmentData[idx+2], segmentData[idx+3]);
+
+            vec2 v1 = playerTilePos - A;
+            vec2 v2 = B - A;
+            vec2 v3 = vec2(-dir.y, dir.x);
+
+            float dot_v2_v3 = v2.x * v3.x + v2.y * v3.y;
+
+            if (abs(dot_v2_v3) > 1e-6) {{
+                float t1 = (v2.x * v1.y - v2.y * v1.x) / dot_v2_v3;
+                if (t1 > 0.0 && t1 < minDist) {{
+                    float t2 = (v1.x * v3.x + v1.y * v3.y) / dot_v2_v3;
+                    if (t2 >= 0.0 && t2 <= 1.0) {{
+                        minDist = t1;
+                        hitColorType = int(segmentData[idx+4] + 0.1);
+                        hitNormalMod = (abs(v2.x) > abs(v2.y)) ? 0.8 : 1.0;
+                    }}
+                }}
+            }}
+        }}
+
+        int outIdx = int(ray) * 7;
+
+        if (minDist == 5000.0) {{
+            renderData[outIdx] = -10.0; 
+            float farX = (playerTilePos.x + 4000.0 * dir.x) * tileSize;
+            float farY = (playerTilePos.y + 4000.0 * dir.y) * tileSize;
+            hitData[ray] = vec4(5000.0 * tileSize, farX, farY, 1.0); 
+            return;
+        }}
+
+        float hitX = (playerTilePos.x + minDist * dir.x) * tileSize;
+        float hitY = (playerTilePos.y + minDist * dir.y) * tileSize;
+        float distCorrected = minDist * cos(playerAngle - rayAngle);
+        float zValue = distCorrected * tileSize;
+        float distance = minDist * tileSize;
+
+        vec3 color = getWallColor(hitColorType) * hitNormalMod;
+
+        renderData[outIdx + 0] = ((float(ray) * scale) / screenWidth) * 2.0 - 1.0;
+        renderData[outIdx + 1] = (scale / screenWidth) * 2.0;
+        renderData[outIdx + 2] = 2.0;
+        renderData[outIdx + 3] = distance;
+
+        renderData[outIdx + 4] = color.r;
+        renderData[outIdx + 5] = color.g;
+        renderData[outIdx + 6] = color.b;
+
+        hitData[ray] = vec4(zValue, hitX, hitY, 1.0);
+    }}
+    """
 
 
 class RayCasting:
     def __init__(self, game):
         self.game = game
-        self.ray_hits_for_2d = []
+        self.active_segments = []
+        self.num_segments = 0
         self.screen_dist = 1000
+
+        self.ctx = game.renderer.ctx
+        self.compute_shader = self.ctx.compute_shader(get_shader_source())
+        self.output_buffer = None
+        self.hit_buffer = None
+        self.map_buffer = None
+        self.last_chunk = None
+
         self.update_settings()
 
     def update_settings(self):
@@ -22,165 +135,92 @@ class RayCasting:
         self.delta_angle = FOV / self.num_rays
         self.screen_dist = (self.game.width // 2) / math.tan(HALF_FOV)
 
+        if self.output_buffer: self.output_buffer.release()
+        if self.hit_buffer: self.hit_buffer.release()
+
+        self.output_buffer = self.ctx.buffer(reserve=self.num_rays * 7 * 4)
+        self.hit_buffer = self.ctx.buffer(reserve=self.num_rays * 4 * 4)
+
+    def update_map_buffer(self, px, py):
+        cx = int((px / TILE_SIZE) // 32)
+        cy = int((py / TILE_SIZE) // 32)
+
+        zoom = self.game.zoom_level
+        max_screen_dim = max(self.game.width, self.game.height)
+        tiles_across = max_screen_dim / (TILE_SIZE * zoom)
+        chunks_across = tiles_across / 32
+
+        dynamic_radius = int(chunks_across / 2) + 1
+        dynamic_radius = max(2, min(dynamic_radius, 10))
+
+        if not hasattr(self, 'last_radius'):
+            self.last_radius = -1
+
+        if (cx, cy) != self.last_chunk or dynamic_radius != self.last_radius:
+            self.last_chunk = (cx, cy)
+            self.last_radius = dynamic_radius
+
+            active_segments = self.game.map_handler.get_active_segments(px, py, radius_chunks=dynamic_radius)
+            self.num_segments = len(active_segments)
+            if self.num_segments == 0:
+                active_segments = [(0, 0, 0, 0, 0)]
+                self.num_segments = 0
+
+            flat_data = np.array(active_segments, dtype='f4').flatten()
+            req_bytes = max(flat_data.nbytes, 4)
+
+            if not self.map_buffer or self.map_buffer.size < req_bytes:
+                if self.map_buffer: self.map_buffer.release()
+                self.map_buffer = self.ctx.buffer(reserve=max(req_bytes, 1000000))
+
+            self.map_buffer.write(flat_data.tobytes())
+            self.active_segments = active_segments
+
     def ray_cast_view(self):
-        self.ray_hits_for_2d = []
+        self.update_map_buffer(self.game.player.pos[0], self.game.player.pos[1])
 
-        render_data = []
+        if self.map_buffer: self.map_buffer.bind_to_storage_buffer(0)
+        self.output_buffer.bind_to_storage_buffer(1)
+        self.hit_buffer.bind_to_storage_buffer(2)
 
-        ox, oy = self.game.player.pos
-        map_x, map_y = int(ox // TILE_SIZE), int(oy // TILE_SIZE)
+        self.compute_shader['playerTilePos'].value = (
+        self.game.player.pos[0] / TILE_SIZE, self.game.player.pos[1] / TILE_SIZE)
+        self.compute_shader['playerAngle'].value = self.game.player.angle
+        self.compute_shader['numSegments'].value = self.num_segments
+        self.compute_shader['numRays'].value = self.num_rays
+        self.compute_shader['fov'].value = FOV
+        self.compute_shader['halfFov'].value = HALF_FOV
+        self.compute_shader['tileSize'].value = TILE_SIZE
+        self.compute_shader['screenWidth'].value = self.game.width
+        self.compute_shader['scale'].value = SCALE
 
-        ray_angle = self.game.player.angle - HALF_FOV + 0.0001
+        num_groups = (self.num_rays + 15) // 16
 
-        z_buffer = []
+        if hasattr(self, 'z_buffer_cache'):
+            hit_raw = np.frombuffer(self.hit_buffer.read(), dtype='f4').reshape((self.num_rays, 4))
+            self.z_buffer_cache = hit_raw[:, 0].tolist()
+        else:
+            self.z_buffer_cache = [5000.0] * self.num_rays
 
-        strip_width_norm = (SCALE / self.game.width) * 2
+        self.compute_shader.run(num_groups, 1, 1)
 
-        strip_height_norm = 2.0
+        return self.output_buffer, self.z_buffer_cache
 
-        for ray in range(self.num_rays):
-            sin_a = math.sin(ray_angle)
-            cos_a = math.cos(ray_angle)
-
-            delta_dist_x = abs(1 / (cos_a + 1e-30))
-            delta_dist_y = abs(1 / (sin_a + 1e-30))
-
-            cur_map_x, cur_map_y = map_x, map_y
-
-            if cos_a < 0:
-                step_x = -1
-                side_dist_x = (ox / TILE_SIZE - cur_map_x) * delta_dist_x
-            else:
-                step_x = 1
-                side_dist_x = (cur_map_x + 1.0 - ox / TILE_SIZE) * delta_dist_x
-
-            if sin_a < 0:
-                step_y = -1
-                side_dist_y = (oy / TILE_SIZE - cur_map_y) * delta_dist_y
-            else:
-                step_y = 1
-                side_dist_y = (cur_map_y + 1.0 - oy / TILE_SIZE) * delta_dist_y
-
-            hit = False
-            side = 0
-            wall_type = 0
-
-            for _ in range(500):
-                if side_dist_x < side_dist_y:
-                    side_dist_x += delta_dist_x
-                    cur_map_x += step_x
-                    side = 0
-                else:
-                    side_dist_y += delta_dist_y
-                    cur_map_y += step_y
-                    side = 1
-
-                wall = self.game.map_handler.get_wall(cur_map_x, cur_map_y)
-                if wall:
-                    wall_type = wall
-                    hit = True
-                    break
-
-            hit_world_x, hit_world_y = 0, 0
-            perp_wall_dist = 0
-
-            if hit:
-                if side == 0:
-                    perp_wall_dist = side_dist_x - delta_dist_x
-                else:
-                    perp_wall_dist = side_dist_y - delta_dist_y
-
-                hit_world_x = ox + (perp_wall_dist * TILE_SIZE) * cos_a
-                hit_world_y = oy + (perp_wall_dist * TILE_SIZE) * sin_a
-                self.ray_hits_for_2d.append((hit_world_x, hit_world_y))
-            else:
-                perp_wall_dist = 5000 / TILE_SIZE
-                hit_world_x = ox + 5000 * cos_a
-                hit_world_y = oy + 5000 * sin_a
-                self.ray_hits_for_2d.append((hit_world_x, hit_world_y))
-
-            dist_corrected = perp_wall_dist * math.cos(self.game.player.angle - ray_angle)
-            z_buffer.append(dist_corrected * TILE_SIZE)
-
-            if wall_type in WALL_TYPES:
-                base_color = WALL_TYPES[wall_type].color
-                if side == 1:
-                    base_color = (
-                        int(base_color[0] * 0.8),
-                        int(base_color[1] * 0.8),
-                        int(base_color[2] * 0.8)
-                    )
-
-                x_norm = ((ray * SCALE) / self.game.width) * 2 - 1.0
-
-                distance_pixels = perp_wall_dist * TILE_SIZE
-
-                render_data.append((
-                    x_norm,
-                    strip_width_norm,
-                    strip_height_norm,
-                    distance_pixels,
-                    base_color
-                ))
-
-            ray_angle += self.delta_angle
-
-        return render_data, z_buffer
-
-    def draw_fov_cone(self, surface, offset_x, offset_y, zoom):
-        if not self.ray_hits_for_2d:
-            return
-
-        temp_surface = pygame.Surface((self.game.width, self.game.height), pygame.SRCALPHA)
-        center_x = self.game.width // 2
-        center_y = (self.game.height - self.game.strip_height) // 2
-
-        points = [(center_x, center_y)]
-
-        step = 2
-        for i in range(0, len(self.ray_hits_for_2d), step):
-            wx, wy = self.ray_hits_for_2d[i]
-            sx = wx * zoom + offset_x
-            sy = wy * zoom + offset_y
-            points.append((sx, sy))
-
-        pygame.draw.polygon(temp_surface, FOV_CONE_COLOR, points)
-        surface.blit(temp_surface, (0, 0))
-
-    def draw_2d_map(self, surface):
+    def draw_2d_entities(self, surface):
         map_view_height = self.game.height - self.game.strip_height
-
         clip_rect = pygame.Rect(0, 0, self.game.width, map_view_height)
         surface.set_clip(clip_rect)
 
-        p_x, p_y = self.game.player.map_pos
-        current_tile_size = TILE_SIZE * self.game.zoom_level
-
-        tiles_in_width = (self.game.width // current_tile_size) // 2 + 2
-        tiles_in_height = (map_view_height // current_tile_size) // 2 + 2
-
         center_x = self.game.width // 2
         center_y = map_view_height // 2
+        zoom = self.game.zoom_level
 
-        offset_x = center_x - self.game.player.x * self.game.zoom_level
-        offset_y = center_y - self.game.player.y * self.game.zoom_level
+        world_offset_x = center_x - self.game.player.pos[0] * zoom
+        world_offset_y = center_y - self.game.player.pos[1] * zoom
 
-        for y in range(int(p_y - tiles_in_height), int(p_y + tiles_in_height)):
-            for x in range(int(p_x - tiles_in_width), int(p_x + tiles_in_width)):
-                val = self.game.map_handler.get_wall(x, y)
-                if val in WALL_TYPES:
-                    color = WALL_TYPES[val].color
-                    draw_x = x * TILE_SIZE * self.game.zoom_level + offset_x
-                    draw_y = y * TILE_SIZE * self.game.zoom_level + offset_y
+        self.game.entity_manager.draw_2d(surface, world_offset_x, world_offset_y, zoom)
 
-                    if -current_tile_size < draw_x < self.game.width and -current_tile_size < draw_y < map_view_height:
-                        pygame.draw.rect(surface, color,
-                                         (draw_x, draw_y, current_tile_size + 1, current_tile_size + 1))
-
-        self.draw_fov_cone(surface, offset_x, offset_y, self.game.zoom_level)
-        self.game.entity_manager.draw_2d(surface, offset_x, offset_y, self.game.zoom_level)
-
-        player_screen_radius = max(3, int(PLAYER_SIZE * self.game.zoom_level))
+        player_screen_radius = max(3, int(PLAYER_SIZE * zoom))
         pygame.draw.circle(surface, WHITE, (center_x, center_y), player_screen_radius)
 
         surface.set_clip(None)

@@ -7,9 +7,10 @@ from settings import *
 
 class Sentinel(Entity):
     def __init__(self, game, x, y):
-        super().__init__(game, x, y, (50, 50, 180), "square")
+        # Utilise le type "amoeba" (masse gélatineuse)
+        super().__init__(game, x, y, (50, 50, 180), "amoeba")
         self.speed = 1.2
-        self.size = 20
+        self.size = 25 # Légèrement plus gros
         self.state = "patrol"
         self.last_known_pos = None
         self.search_timer = 0
@@ -35,11 +36,11 @@ class Sentinel(Entity):
         if can_see_player:
             self.state = "alert"
             self.last_known_pos = (px, py)
-            self.color = (255, 50, 50)
+            self.color = (220, 50, 50) # Rouge organique
         elif self.state == "alert":
             self.state = "search"
             self.search_timer = 180
-            self.color = (255, 165, 0)
+            self.color = (200, 140, 20) # Orange/Marron
 
         target_x, target_y = self.x, self.y
 
@@ -55,7 +56,7 @@ class Sentinel(Entity):
             dist_target = self.get_distance_to(target_x, target_y)
             if dist_target < 20:
                 self.search_timer -= 1
-                self.angle += 0.1
+                self.angle += 0.05
                 if self.search_timer <= 0:
                     self.state = "patrol"
                     self.color = (50, 50, 180)

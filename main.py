@@ -1,8 +1,9 @@
 # main.py
 import pygame
 import sys
-import string
 import random
+import time
+import math
 from settings import *
 from player import Player
 from raycasting import RayCasting
@@ -10,6 +11,8 @@ from geometry import MapHandler
 from colors import *
 from entity_manager import EntityManager
 from renderer import Renderer
+from controls_config import ControlsConfig
+from ui_manager import UIManager
 
 
 class Game:
@@ -20,9 +23,12 @@ class Game:
         self.width = res_width
         self.height = res_height
 
+        pygame.display.gl_set_attribute(pygame.GL_SWAP_CONTROL, 0)
+
         self.screen = pygame.display.set_mode(
             (self.width, self.height),
-            pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE
+            pygame.OPENGL | pygame.DOUBLEBUF | pygame.RESIZABLE,
+            vsync=0
         )
 
         pygame.display.set_caption("2D First-Person Viewer")
@@ -31,30 +37,37 @@ class Game:
         self.strip_height = DEFAULT_STRIP_HEIGHT
         self.zoom_level = 1.0
 
+        self.controls_config = ControlsConfig()
+        self.parsed_controls = {}
+        self.update_parsed_controls()
+
         self.map_handler = MapHandler()
         self.player = Player(self)
+
+        self.renderer = Renderer(self)
         self.raycasting = RayCasting(self)
         self.entity_manager = EntityManager(self)
 
-        self.renderer = Renderer(self)
-
         self.overlay_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-
-        self.dragging_strip = False
-        self.drag_hover = False
+        self.font_fps = pygame.font.SysFont("Courier", 20, bold=True)
 
         self.freeze_entities = False
-
-        # --- UI Seed ---
+        self.dragging_strip = False
+        self.drag_hover = False
+        self.gc_timer = 0
         self.current_seed_input = GAME_SEED
-        self.seed_input_active = False
-        self.font_ui = pygame.font.SysFont("Arial", 24)
 
-    def reload_world(self):
-        """Recharge tout avec la nouvelle seed"""
+        self.ui_manager = UIManager(self)
+
+    def update_parsed_controls(self):
+        self.parsed_controls = self.controls_config.get_parsed_binds()
+
+    def reload_world(self, seed_val):
+        self.current_seed_input = seed_val
         print(f"Reloading world with seed: {self.current_seed_input}")
         self.map_handler.reset(self.current_seed_input)
         self.entity_manager.reset(self.current_seed_input)
+        self.raycasting.last_chunk = None
 
     def update_dimensions(self, w, h):
         self.width = w
@@ -62,141 +75,37 @@ class Game:
         self.strip_height = min(self.strip_height, self.height - 50)
         self.raycasting.update_settings()
         self.overlay_surface = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
-
-    def draw_text_with_outline(self, text, font, color, pos, outline_color=BLACK, center=False):
-        offsets = [(-2, -2), (-2, 2), (2, -2), (2, 2)]
-        x, y = pos
-        if center:
-            surf_size = font.size(text)
-            x -= surf_size[0] // 2
-            y -= surf_size[1] // 2
-        for dx, dy in offsets:
-            surf = font.render(text, True, outline_color)
-            self.overlay_surface.blit(surf, (x + dx, y + dy))
-        surf = font.render(text, True, color)
-        self.overlay_surface.blit(surf, (x, y))
-
-    def draw_pixel_art_title(self, text, center_x, center_y, scale=8):
-        font_small = pygame.font.SysFont("Arial", 12, bold=True)
-        small_surf = font_small.render(text, False, WHITE)
-
-        w = small_surf.get_width() * scale
-        h = small_surf.get_height() * scale
-        big_surf = pygame.transform.scale(small_surf, (w, h))
-
-        rect = big_surf.get_rect(center=(center_x, center_y))
-
-        shadow_surf = font_small.render(text, False, BLACK)
-        shadow_big = pygame.transform.scale(shadow_surf, (w, h))
-        shadow_rect = shadow_big.get_rect(center=(center_x + 6, center_y + 6))
-        self.overlay_surface.blit(shadow_big, shadow_rect)
-
-        self.overlay_surface.blit(big_surf, rect)
-
-    def draw_controls_window(self, center_x, center_y):
-        controls = [
-            ("Déplacement", "ZQSD", "L-Stick"),
-            ("Rotation", "Flèches / Souris", "R-Stick"),
-            ("Tir (Kill)", "Clic Gauche / Espace", "RB"),
-            ("Onde de Choc", "Clic Droit / Shift", "LB"),
-            ("Zoom", "Molette", "Gâchettes LT/RT"),
-            ("Pause", "Aucune", "Start"),
-            ("Quitter", "Echap", "B")
-        ]
-
-        win_width = 900
-        win_height = 520
-        win_x = center_x - win_width // 2
-        win_y = center_y - win_height // 2
-
-        bg_surface = pygame.Surface((win_width, win_height))
-        bg_surface.set_alpha(240)
-        bg_surface.fill(BLACK)
-        self.overlay_surface.blit(bg_surface, (win_x, win_y))
-        pygame.draw.rect(self.overlay_surface, WHITE, (win_x, win_y, win_width, win_height), 4)
-
-        font_header = pygame.font.SysFont("Arial", 32, bold=True)
-        self.draw_text_with_outline("CONTRÔLES", font_header, WHITE, (win_x + win_width // 2, win_y + 40), BLACK,
-                                    center=True)
-
-        row_y = win_y + 100
-        font_item = pygame.font.SysFont("Arial", 26)
-        col_x = [win_x + 50, win_x + 350, win_x + 650]
-
-        for action, key, pad in controls:
-            self.overlay_surface.blit(font_item.render(action, True, WHITE), (col_x[0], row_y))
-            self.overlay_surface.blit(font_item.render(key, True, LIGHTGREY), (col_x[1], row_y))
-            self.overlay_surface.blit(font_item.render(pad, True, (0, 255, 255)), (col_x[2], row_y))
-            row_y += 40
-
-        seed_y = row_y + 40
-        pygame.draw.line(self.overlay_surface, WHITE, (win_x + 20, seed_y), (win_x + win_width - 20, seed_y), 2)
-
-        seed_y += 30
-        self.overlay_surface.blit(font_item.render("Seed : ", True, WHITE), (win_x + 50, seed_y))
-
-        input_rect = pygame.Rect(win_x + 150, seed_y - 5, 470, 40)
-        color_input = WHITE if self.seed_input_active else LIGHTGREY
-        pygame.draw.rect(self.overlay_surface, DARKGREY, input_rect)
-        pygame.draw.rect(self.overlay_surface, color_input, input_rect, 2)
-
-        text_surf = self.font_ui.render(self.current_seed_input, True, WHITE)
-        area = pygame.Rect(0, 0, 460, 40)
-        self.overlay_surface.blit(text_surf, (win_x + 160, seed_y), area)
-
-        btn_rect = pygame.Rect(win_x + 640, seed_y - 5, 150, 40)
-        pygame.draw.rect(self.overlay_surface, (0, 100, 0), btn_rect)
-        pygame.draw.rect(self.overlay_surface, WHITE, btn_rect, 2)
-        btn_text = self.font_ui.render("GÉNÉRER", True, WHITE)
-        text_rect = btn_text.get_rect(center=btn_rect.center)
-        self.overlay_surface.blit(btn_text, text_rect)
-
-        self.ui_input_rect = input_rect
-        self.ui_gen_btn_rect = btn_rect
+        self.ui_manager.on_resize(w, h)
 
     def handle_input(self):
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_ESCAPE]:
-            pygame.quit()
-            sys.exit()
-
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
 
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                if self.freeze_entities:
+                    self.ui_manager.handle_escape()
+                else:
+                    self.freeze_entities = True
+                    self.ui_manager.open_main_menu()
+                continue
+
             if self.freeze_entities:
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    if hasattr(self, 'ui_input_rect') and self.ui_input_rect.collidepoint(event.pos):
-                        self.seed_input_active = True
-                    else:
-                        self.seed_input_active = False
-
-                    if hasattr(self, 'ui_gen_btn_rect') and self.ui_gen_btn_rect.collidepoint(event.pos):
-                        self.reload_world()
-
-                if event.type == pygame.KEYDOWN and self.seed_input_active:
-                    if event.key == pygame.K_RETURN:
-                        self.reload_world()
-                    elif event.key == pygame.K_BACKSPACE:
-                        self.current_seed_input = self.current_seed_input[:-1]
-                    else:
-                        if len(self.current_seed_input) < 25 and event.unicode in string.ascii_letters + string.digits:
-                            self.current_seed_input += event.unicode
-
-            if not self.freeze_entities:
+                self.ui_manager.handle_event(event)
+            else:
                 if event.type == pygame.MOUSEWHEEL:
                     if event.y > 0:
                         self.zoom_level *= 1.1
                     elif event.y < 0:
                         self.zoom_level /= 1.1
                     if self.zoom_level < 0.1: self.zoom_level = 0.1
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    if event.button == 1 and self.drag_hover: self.dragging_strip = True
-                elif event.type == pygame.MOUSEBUTTONUP:
-                    if event.button == 1: self.dragging_strip = False
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and self.drag_hover:
+                    self.dragging_strip = True
+                elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                    self.dragging_strip = False
                 elif event.type == pygame.MOUSEMOTION:
-                    mouse_x, mouse_y = event.pos
+                    mouse_y = event.pos[1]
                     limit_y = self.height - self.strip_height
                     if limit_y - 10 < mouse_y < limit_y + 10:
                         self.drag_hover = True
@@ -219,24 +128,28 @@ class Game:
 
         if self.player.joystick and self.player.joystick.get_init():
             try:
-                if self.player.joystick.get_numaxes() >= 6:
+                if not self.freeze_entities and self.player.joystick.get_numaxes() >= 6:
                     lt_val = self.player.joystick.get_axis(4)
                     rt_val = self.player.joystick.get_axis(5)
-                    if lt_val > -0.8:
-                        self.zoom_level /= 1.02
-                        if self.zoom_level < 0.1: self.zoom_level = 0.1
-                    if rt_val > -0.8:
-                        self.zoom_level *= 1.02
+                    if lt_val > -0.8: self.zoom_level = max(0.1, self.zoom_level / 1.02)
+                    if rt_val > -0.8: self.zoom_level *= 1.02
 
                 start_pressed = False
-                start_buttons = [7, 6, 9]
-                for btn in start_buttons:
+                for btn in [7, 6, 9]:
                     if self.player.joystick.get_numbuttons() > btn and self.player.joystick.get_button(btn):
                         start_pressed = True
                         break
                 if start_pressed and not self.player.start_btn_pressed:
-                    self.freeze_entities = not self.freeze_entities
+                    if self.freeze_entities:
+                        self.ui_manager.handle_escape()
+                    else:
+                        self.freeze_entities = True
+                        self.ui_manager.open_main_menu()
                 self.player.start_btn_pressed = start_pressed
+
+                if self.freeze_entities:
+                    self.ui_manager.handle_joystick_continuous()
+
             except pygame.error:
                 pass
 
@@ -248,28 +161,48 @@ class Game:
                 self.player.movement()
                 self.entity_manager.update()
 
-            wall_render_data, z_buffer = self.raycasting.ray_cast_view()
+                self.gc_timer += 1
+                if self.gc_timer > 60:
+                    px, py = self.player.pos
+                    limit_sq = 2500 * 2500
+                    self.entity_manager.entities = [
+                        e for e in self.entity_manager.entities
+                        if (e.x - px) ** 2 + (e.y - py) ** 2 < limit_sq
+                    ]
+                    self.gc_timer = 0
+
+            wall_render_buffer, z_buffer = self.raycasting.ray_cast_view()
             entity_render_data = self.entity_manager.get_render_data(z_buffer)
 
             self.overlay_surface.fill((0, 0, 0, 0))
-            self.raycasting.draw_2d_map(self.overlay_surface)
+            self.raycasting.draw_2d_entities(self.overlay_surface)
 
             split_y = self.height - self.strip_height
             line_color = RED_WALL if (self.drag_hover or self.dragging_strip) else WHITE
             pygame.draw.line(self.overlay_surface, line_color, (0, split_y), (self.width, split_y), 4)
 
             if self.freeze_entities:
-                center_x = self.width // 2
-                center_y = self.height // 2
+                self.ui_manager.render(self.overlay_surface)
 
-                self.draw_pixel_art_title("PAUSE", center_x, center_y - 380, scale=8)
+            fps_text = f"{self.clock.get_fps():.0f}"
+            fps_surf_shadow = self.font_fps.render(fps_text, False, BLACK)
+            self.overlay_surface.blit(fps_surf_shadow, (self.width - 58, 12))
+            fps_surf = self.font_fps.render(fps_text, False, WHITE)
+            self.overlay_surface.blit(fps_surf, (self.width - 60, 10))
 
-                self.draw_controls_window(center_x, center_y)
-
-            self.renderer.render(wall_render_data, entity_render_data, self.overlay_surface, self.strip_height)
+            self.renderer.render(
+                wall_render_buffer,
+                self.raycasting.num_rays,
+                entity_render_data,
+                self.overlay_surface,
+                self.strip_height,
+                self.raycasting.num_segments,
+                self.player.pos,
+                self.zoom_level
+            )
 
             pygame.display.flip()
-            self.clock.tick(FPS)
+            self.clock.tick(0)
 
 
 if __name__ == "__main__":

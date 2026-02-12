@@ -19,7 +19,7 @@ ENTITY_SIZE = 15
 LIGHT_INTENSITY_FACTOR = 1500.0
 MIN_BRIGHTNESS = 0.05
 
-MANUAL_SEED = "" # Vous pouvez écrire votre seed personnalisée ici
+MANUAL_SEED = ""
 
 def generate_random_seed():
     chars = string.ascii_letters + string.digits

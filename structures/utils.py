@@ -1,9 +1,9 @@
 # structures/utils.py
 
-def is_area_free(chunk_data, x, y, w, h):
-    """Vérifie si une zone rectangulaire est libre de murs dans le chunk data donné."""
-    for i in range(x, x + w):
-        for j in range(y, y + h):
-            if (i, j) in chunk_data:
-                return False
-    return True
+def check_overlap(bboxes, new_box):
+    """Vérifie si une bounding box (boîte de collision) chevauche une autre zone déjà occupée."""
+    nx, ny, nw, nh = new_box
+    for (bx, by, bw, bh) in bboxes:
+        if not (nx + nw < bx or nx > bx + bw or ny + nh < by or ny > by + bh):
+            return False # Chevauchement !
+    return True # Zone libre

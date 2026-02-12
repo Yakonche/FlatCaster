@@ -1,5 +1,7 @@
 # entities/shockwave.py
 import pygame
+import math
+import random
 from settings import *
 
 
@@ -14,11 +16,12 @@ class Shockwave:
         self.width = 15
         self.marked_for_deletion = False
 
+        # Création d'irrégularités pour faire "liquide"
+        self.points_offset = [random.uniform(0.8, 1.2) for _ in range(16)]
+
     def update(self):
         self.radius += self.speed
-
         self.speed *= 0.92
-
         self.alpha -= 8
         self.width = max(1, self.width * 0.95)
 
@@ -28,16 +31,30 @@ class Shockwave:
     def draw_2d(self, surface, offset_x, offset_y, zoom):
         sx = self.x * zoom + offset_x
         sy = self.y * zoom + offset_y
-        current_radius = int(self.radius * zoom)
-        current_width = max(1, int(self.width * zoom))
+        current_radius = self.radius * zoom
 
         if current_radius > 0 and self.alpha > 0:
-            diam = current_radius * 2 + 10
-            temp_surf = pygame.Surface((diam, diam), pygame.SRCALPHA)
+            # Construction d'un polygone irrégulier (effet liquide)
+            points = []
+            num_points = len(self.points_offset)
+            angle_step = (math.pi * 2) / num_points
 
-            color = (0, 255, 255, int(self.alpha))
+            for i in range(num_points):
+                # Rotation légère avec le temps
+                angle = i * angle_step + pygame.time.get_ticks() * 0.005
+                # Rayon modifié par l'offset aléatoire
+                r = current_radius * self.points_offset[i]
 
-            center = (diam // 2, diam // 2)
-            pygame.draw.circle(temp_surf, color, center, current_radius, current_width)
+                px = sx + math.cos(angle) * r
+                py = sy + math.sin(angle) * r
+                points.append((px, py))
 
-            surface.blit(temp_surf, (sx - center[0], sy - center[1]))
+            # Dessin de l'anneau
+            # Note: pygame.draw.polygon avec width > 0 ne ferme pas toujours bien les coins épais,
+            # mais pour un effet liquide rapide c'est suffisant.
+            # Pour la transparence, on a besoin d'une surface temporaire ou de couleurs RGBA directes (si supporté par draw)
+
+            # Méthode simple avec transparence simulée par l'épaisseur
+            color = (0, 255, 255)
+            if len(points) > 2:
+                pygame.draw.lines(surface, color, True, points, max(1, int(self.width * zoom)))

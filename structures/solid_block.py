@@ -1,11 +1,13 @@
 # structures/solid_block.py
-from .utils import is_area_free
+from .utils import check_overlap
 
-def generate_solid_rect(chunk_data, x, y, w, h, color_id, filled=True):
-    """Génère un bloc rectangulaire simple"""
-    if not is_area_free(chunk_data, x, y, w, h): return False
-    for i in range(x, x + w):
-        for j in range(y, y + h):
-            if filled or (i == x or i == x + w - 1 or j == y or j == y + h - 1):
-                chunk_data[(i, j)] = color_id
+def generate_solid_rect(segments, bboxes, x, y, w, h, color_id, filled=True):
+    """Un cube fermé par 4 lignes vectorielles"""
+    if not check_overlap(bboxes, (x - 1, y - 1, w + 2, h + 2)):
+        return False
+    bboxes.append((x - 1, y - 1, w + 2, h + 2))
+    segments.append((x, y, x + w, y, color_id))
+    segments.append((x + w, y, x + w, y + h, color_id))
+    segments.append((x + w, y + h, x, y + h, color_id))
+    segments.append((x, y + h, x, y, color_id))
     return True

@@ -1,80 +1,56 @@
 # structures/maze.py
 import random
-from .utils import is_area_free
+from .utils import check_overlap
 
 
-def generate_maze(chunk_data, x, y, w, h, color_id):
-    """
-    Génère un labyrinthe parfait (solvable) en utilisant l'algorithme 'Recursive Backtracker'.
-    x, y : coin haut gauche
-    w, h : largeur et hauteur (doivent être impairs de préférence pour un joli rendu)
-    """
-
-    # 1. Vérification de l'espace (on a besoin d'une marge de sécurité)
-    if not is_area_free(chunk_data, x, y, w, h):
+def generate_maze(segments, bboxes, start_x, start_y, w, h, color_id):
+    """Génère un labyrinthe dont les murs sont des lignes mathématiques fines, sans effet d'escalier."""
+    if not check_overlap(bboxes, (start_x - 1, start_y - 1, w + 2, h + 2)):
         return False
+    bboxes.append((start_x - 1, start_y - 1, w + 2, h + 2))
 
-    # 2. Initialisation : Tout remplir de murs
-    # On utilise un set local pour faciliter la logique de l'algo avant de transférer au chunk
-    walls = set()
-    for i in range(w):
-        for j in range(h):
-            # On remplit tout le rectangle de murs dans le chunk
-            chunk_data[(x + i, y + j)] = color_id
-            walls.add((i, j))
+    horiz = [[True] * w for _ in range(h + 1)]
+    vert = [[True] * (w + 1) for _ in range(h)]
 
-    # 3. Algorithme de génération (creusage de chemins)
-    # On travaille en coordonnées locales (0 à w, 0 à h)
-    # On commence à (1,1) pour laisser une bordure
-    start_cell = (1, 1)
-    stack = [start_cell]
-    visited = {start_cell}
-
-    # On creuse le point de départ
-    if (x + 1, y + 1) in chunk_data:
-        del chunk_data[(x + 1, y + 1)]
-
-    directions = [(0, 2), (0, -2), (2, 0), (-2, 0)]
+    visited = set([(0, 0)])
+    stack = [(0, 0)]
 
     while stack:
-        current_x, current_y = stack[-1]
+        cx, cy = stack[-1]
         neighbors = []
-
-        for dx, dy in directions:
-            nx, ny = current_x + dx, current_y + dy
-            # Vérifier si le voisin est dans les limites (avec une bordure de 1 mur)
-            if 0 < nx < w - 1 and 0 < ny < h - 1:
-                if (nx, ny) not in visited:
-                    neighbors.append((nx, ny, dx, dy))
+        for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+            nx, ny = cx + dx, cy + dy
+            if 0 <= nx < w and 0 <= ny < h and (nx, ny) not in visited:
+                neighbors.append((nx, ny, dx, dy))
 
         if neighbors:
             nx, ny, dx, dy = random.choice(neighbors)
-
-            # On casse le mur entre la cellule actuelle et la voisine (le mur intermédiaire)
-            wall_x, wall_y = current_x + dx // 2, current_y + dy // 2
-
-            # Suppression du mur intermédiaire dans le chunk
-            if (x + wall_x, y + wall_y) in chunk_data:
-                del chunk_data[(x + wall_x, y + wall_y)]
-
-            # Suppression de la cellule cible dans le chunk (devient un chemin)
-            if (x + nx, y + ny) in chunk_data:
-                del chunk_data[(x + nx, y + ny)]
-
+            if dx == 1:
+                vert[cy][nx] = False
+            elif dx == -1:
+                vert[cy][cx] = False
+            elif dy == 1:
+                horiz[ny][cx] = False
+            elif dy == -1:
+                horiz[cy][cx] = False
             visited.add((nx, ny))
             stack.append((nx, ny))
         else:
             stack.pop()
 
-    # 4. Création de l'Entrée et de la Sortie
-    # On assure une entrée en haut (1, 0) et une sortie en bas (w-2, h-1)
-    # Entrée
-    if (x + 1, y) in chunk_data:
-        del chunk_data[(x + 1, y)]
+    # Entrée / Sortie
+    horiz[0][0] = False
+    horiz[h][w - 1] = False
 
-    # Sortie (on cherche un point connectable en bas)
-    exit_x = w - 2 if (w % 2 != 0) else w - 3
-    if (x + exit_x, y + h - 1) in chunk_data:
-        del chunk_data[(x + exit_x, y + h - 1)]
+    # Conversion en lignes pour la carte graphique
+    for y in range(h + 1):
+        for x in range(w):
+            if horiz[y][x]:
+                segments.append((start_x + x, start_y + y, start_x + x + 1, start_y + y, color_id))
+
+    for y in range(h):
+        for x in range(w + 1):
+            if vert[y][x]:
+                segments.append((start_x + x, start_y + y, start_x + x, start_y + y + 1, color_id))
 
     return True

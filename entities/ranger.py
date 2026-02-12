@@ -8,7 +8,8 @@ from settings import *
 
 class Ranger(Entity):
     def __init__(self, game, x, y):
-        super().__init__(game, x, y, (0, 255, 255), "diamond")
+        # Utilise le type "virus" (géométrique et piquant)
+        super().__init__(game, x, y, (0, 255, 255), "virus")
         self.speed = 2.0
         self.state = "positioning"
         self.charge_timer = 0
@@ -31,7 +32,7 @@ class Ranger(Entity):
         dist_p = self.get_distance_to(px, py)
 
         if self.state == "positioning":
-            self.color = (0, 255, 255)
+            self.color = (0, 200, 200)
 
             if dist_p < self.ideal_range - 50:
                 angle_away = math.atan2(self.y - py, self.x - px)
@@ -48,9 +49,13 @@ class Ranger(Entity):
                 self.charge_timer = 60
 
         elif self.state == "aiming":
-            self.color = (255, 255, 255)
-            self.charge_timer -= 1
+            # Clignote en blanc avant de tirer
+            if (pygame.time.get_ticks() // 100) % 2 == 0:
+                self.color = (255, 255, 255)
+            else:
+                self.color = (0, 200, 200)
 
+            self.charge_timer -= 1
             self.angle = math.atan2(py - self.y, px - self.x)
 
             if self.charge_timer <= 0:
@@ -60,8 +65,7 @@ class Ranger(Entity):
     def fire_shot(self):
         self.is_firing = True
         self.fire_frame = 5
-        self.color = (255, 0, 0)
-        # Ici on pourrait réduire la vie du joueur
+        self.color = (255, 50, 50)
         print("Ranger fired!")
 
     def draw_2d(self, surface, offset_x, offset_y, zoom):
@@ -75,4 +79,6 @@ class Ranger(Entity):
             ex = sx + math.cos(self.angle) * range_len
             ey = sy + math.sin(self.angle) * range_len
 
-            pygame.draw.line(surface, (255, 255, 0), (sx, sy), (ex, ey), 2)
+            # Tir "organique" (éclair un peu irrégulier)
+            pygame.draw.line(surface, (200, 255, 255), (sx, sy), (ex, ey), 4)
+            pygame.draw.line(surface, (255, 255, 255), (sx, sy), (ex, ey), 1)

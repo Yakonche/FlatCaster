@@ -1,3 +1,4 @@
+# player.py
 import math
 import pygame
 from settings import *
@@ -40,51 +41,54 @@ class Player:
             self.joystick.quit()
             self.joystick = None
 
+    def is_action_pressed(self, action, keys, mouse_btns, joystick):
+
+        b_type, b_val = self.game.parsed_controls['Bindings'].get(action, (None, None))
+        if b_type == 'key' and b_val != -1 and keys[b_val]:
+            return True
+        if b_type == 'mouse' and b_val != -1:
+            idx = b_val - 1
+            if 0 <= idx < len(mouse_btns) and mouse_btns[idx]:
+                return True
+
+        b_type_pad, b_val_pad = self.game.parsed_controls['Gamepad'].get(action, (None, None))
+        if b_type_pad == 'btn' and b_val_pad != -1 and joystick and joystick.get_init():
+            if joystick.get_numbuttons() > b_val_pad and joystick.get_button(b_val_pad):
+                return True
+
+        return False
+
     def movement(self):
         dx = 0
         dy = 0
         current_speed = PLAYER_SPEED
 
         keys = pygame.key.get_pressed()
+        mouse_btns = pygame.mouse.get_pressed()
 
         if self.shoot_cooldown > 0: self.shoot_cooldown -= 1
         if self.shockwave_cooldown > 0: self.shockwave_cooldown -= 1
 
-        if keys[pygame.K_z] or keys[pygame.K_w]: dy -= current_speed
-        if keys[pygame.K_s]: dy += current_speed
-        if keys[pygame.K_q] or keys[pygame.K_a]: dx -= current_speed
-        if keys[pygame.K_d]: dx += current_speed
+        if self.is_action_pressed('sprint', keys, mouse_btns, self.joystick):
+            current_speed *= 2.0
+        if self.is_action_pressed('slow', keys, mouse_btns, self.joystick):
+            current_speed *= 0.5
 
-        if keys[pygame.K_UP]:
-            dx += math.cos(self.angle) * current_speed
-            dy += math.sin(self.angle) * current_speed
-        if keys[pygame.K_DOWN]:
-            dx -= math.cos(self.angle) * current_speed
-            dy -= math.sin(self.angle) * current_speed
+        if self.is_action_pressed('forward', keys, mouse_btns, self.joystick): dy -= current_speed
+        if self.is_action_pressed('backward', keys, mouse_btns, self.joystick): dy += current_speed
+        if self.is_action_pressed('left', keys, mouse_btns, self.joystick): dx -= current_speed
+        if self.is_action_pressed('right', keys, mouse_btns, self.joystick): dx += current_speed
 
-        if keys[pygame.K_LEFT]: self.angle -= PLAYER_ROT_SPEED
-        if keys[pygame.K_RIGHT]: self.angle += PLAYER_ROT_SPEED
+        # Rotation
+        if self.is_action_pressed('rot_left', keys, mouse_btns, self.joystick): self.angle -= PLAYER_ROT_SPEED
+        if self.is_action_pressed('rot_right', keys, mouse_btns, self.joystick): self.angle += PLAYER_ROT_SPEED
 
-        if keys[pygame.K_SPACE]: self.shoot()
-        if keys[pygame.K_LSHIFT]: self.cast_shockwave()
-
-        mouse_btns = pygame.mouse.get_pressed()
-        if mouse_btns[0]: self.shoot()
-        if mouse_btns[2]: self.cast_shockwave()
+        # Actions
+        if self.is_action_pressed('shoot', keys, mouse_btns, self.joystick): self.shoot()
+        if self.is_action_pressed('shockwave', keys, mouse_btns, self.joystick): self.cast_shockwave()
 
         if self.joystick and self.joystick.get_init():
             try:
-                if self.joystick.get_numbuttons() > 0 and self.joystick.get_button(0):
-                    current_speed *= 2.0
-                if self.joystick.get_numbuttons() > 1 and self.joystick.get_button(1):
-                    current_speed *= 0.5
-
-                if self.joystick.get_numbuttons() >= 6:
-                    if self.joystick.get_button(5):
-                        self.shoot()
-                    if self.joystick.get_button(4):
-                        self.cast_shockwave()
-
                 ax0 = self.joystick.get_axis(0)
                 ax1 = self.joystick.get_axis(1)
 
@@ -104,7 +108,6 @@ class Player:
                     target_angle = math.atan2(rs_y, rs_x)
                     self.angle = target_angle
 
-
             except pygame.error:
                 self.disconnect_joystick()
 
@@ -120,30 +123,17 @@ class Player:
             self.game.entity_manager.apply_shockwave(self.x, self.y)
             self.shockwave_cooldown = 60
 
-    def check_wall(self, x, y):
-        return self.game.map_handler.get_wall(int(x // TILE_SIZE), int(y // TILE_SIZE))
-
     def check_collision(self, dx, dy):
         scale = PLAYER_SIZE * 0.5
 
         if dx != 0:
             new_x = self.x + dx
-            wall_hit = (self.check_wall(new_x + scale, self.y + scale) or
-                        self.check_wall(new_x + scale, self.y - scale) or
-                        self.check_wall(new_x - scale, self.y + scale) or
-                        self.check_wall(new_x - scale, self.y - scale))
-
-            if not wall_hit:
+            if self.game.map_handler.is_position_free(new_x, self.y, scale):
                 self.x += dx
 
         if dy != 0:
             new_y = self.y + dy
-            wall_hit = (self.check_wall(self.x + scale, new_y + scale) or
-                        self.check_wall(self.x + scale, new_y - scale) or
-                        self.check_wall(self.x - scale, new_y + scale) or
-                        self.check_wall(self.x - scale, new_y - scale))
-
-            if not wall_hit:
+            if self.game.map_handler.is_position_free(self.x, new_y, scale):
                 self.y += dy
 
     @property

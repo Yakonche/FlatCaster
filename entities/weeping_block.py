@@ -6,7 +6,8 @@ from settings import *
 
 class WeepingBlock(Entity):
     def __init__(self, game, x, y):
-        super().__init__(game, x, y, (120, 120, 120), "circle")
+        # Utilise le type "shell" (dur et rond)
+        super().__init__(game, x, y, (120, 120, 120), "shell")
         self.speed = 6.0
         self.active = False
 
@@ -27,10 +28,10 @@ class WeepingBlock(Entity):
         player_is_looking = -HALF_FOV < angle_to_entity < HALF_FOV
 
         if player_is_looking:
-            self.color = (120, 120, 120)
+            self.color = (100, 100, 100) # Pierre terne
             self.active = False
         else:
-            self.color = (200, 200, 200)
+            self.color = (220, 220, 200) # Chair exposée / ivoire
             self.active = True
 
             if dist_to_player > 30:
