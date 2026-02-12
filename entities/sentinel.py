@@ -7,7 +7,6 @@ from settings import *
 
 class Sentinel(Entity):
     def __init__(self, game, x, y):
-        # Utilise le type "amoeba" (masse gélatineuse)
         super().__init__(game, x, y, (50, 50, 180), "amoeba")
         self.speed = 1.2
         self.size = 25 # Légèrement plus gros
@@ -36,11 +35,11 @@ class Sentinel(Entity):
         if can_see_player:
             self.state = "alert"
             self.last_known_pos = (px, py)
-            self.color = (220, 50, 50) # Rouge organique
+            self.color = (220, 50, 50)
         elif self.state == "alert":
             self.state = "search"
             self.search_timer = 180
-            self.color = (200, 140, 20) # Orange/Marron
+            self.color = (200, 140, 20)
 
         target_x, target_y = self.x, self.y
 

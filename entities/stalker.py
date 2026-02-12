@@ -6,7 +6,6 @@ from settings import *
 
 class Stalker(Entity):
     def __init__(self, game, x, y):
-        # Utilise le type "jellyfish" (tentacules)
         super().__init__(game, x, y, (100, 0, 100), "jellyfish")
         self.speed = 2.5
         self.flee_mode = False
@@ -28,14 +27,13 @@ class Stalker(Entity):
         is_seen = -HALF_FOV < angle_to_me < HALF_FOV and dist_to_player < 600
 
         if is_seen:
-            # Translucide quand vu
             self.color = (120, 50, 120, 150)
 
             if dist_to_player < 200:
                 self.move(math.cos(angle_to_me + p_angle) * 1.0, math.sin(angle_to_me + p_angle) * 1.0)
 
         else:
-            self.color = (80, 0, 80) # Sombre
+            self.color = (80, 0, 80)
 
             if dist_to_player > 30:
                 target_angle = math.atan2(py - self.y, px - self.x)

@@ -14,7 +14,6 @@ class Projectile:
         self.radius = 4
         self.life_time = 100
         self.marked_for_deletion = False
-        # Décalage pour l'animation de pulsation
         self.anim_offset = random.uniform(0, 10)
 
     def update(self, game_map):
@@ -26,7 +25,6 @@ class Projectile:
         dx = math.cos(self.angle) * self.speed
         dy = math.sin(self.angle) * self.speed
 
-        # Vérification collision mur
         if game_map.get_wall(int((self.x + dx) // TILE_SIZE), int((self.y + dy) // TILE_SIZE)):
             self.marked_for_deletion = True
         else:
@@ -37,20 +35,16 @@ class Projectile:
         sx = self.x * zoom + offset_x
         sy = self.y * zoom + offset_y
 
-        # Pulsation de la taille
         pulse = math.sin(pygame.time.get_ticks() * 0.05 + self.anim_offset) * 2
         size = int((self.radius + pulse) * zoom)
         size = max(2, size)
 
-        # Corps principal (Spore toxique)
-        color_core = (200, 255, 0)  # Vert toxique
-        color_glow = (100, 200, 0, 100)  # Lueur
+        color_core = (200, 255, 0)
+        color_glow = (100, 200, 0, 100)
 
-        # Petite traînée
         tail_len = 20 * zoom
         ex = sx - math.cos(self.angle) * tail_len
         ey = sy - math.sin(self.angle) * tail_len
         pygame.draw.line(surface, color_glow, (sx, sy), (ex, ey), int(2 * zoom))
 
-        # Dessin de la spore
         pygame.draw.circle(surface, color_core, (sx, sy), size)

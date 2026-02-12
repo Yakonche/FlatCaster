@@ -8,7 +8,6 @@ from settings import *
 
 class Ranger(Entity):
     def __init__(self, game, x, y):
-        # Utilise le type "virus" (géométrique et piquant)
         super().__init__(game, x, y, (0, 255, 255), "virus")
         self.speed = 2.0
         self.state = "positioning"
@@ -49,7 +48,6 @@ class Ranger(Entity):
                 self.charge_timer = 60
 
         elif self.state == "aiming":
-            # Clignote en blanc avant de tirer
             if (pygame.time.get_ticks() // 100) % 2 == 0:
                 self.color = (255, 255, 255)
             else:
@@ -79,6 +77,5 @@ class Ranger(Entity):
             ex = sx + math.cos(self.angle) * range_len
             ey = sy + math.sin(self.angle) * range_len
 
-            # Tir "organique" (éclair un peu irrégulier)
             pygame.draw.line(surface, (200, 255, 255), (sx, sy), (ex, ey), 4)
             pygame.draw.line(surface, (255, 255, 255), (sx, sy), (ex, ey), 1)

@@ -4,7 +4,6 @@ from .utils import check_overlap
 
 
 def generate_maze(segments, bboxes, start_x, start_y, w, h, color_id):
-    """Génère un labyrinthe dont les murs sont des lignes mathématiques fines, sans effet d'escalier."""
     if not check_overlap(bboxes, (start_x - 1, start_y - 1, w + 2, h + 2)):
         return False
     bboxes.append((start_x - 1, start_y - 1, w + 2, h + 2))
@@ -38,11 +37,9 @@ def generate_maze(segments, bboxes, start_x, start_y, w, h, color_id):
         else:
             stack.pop()
 
-    # Entrée / Sortie
     horiz[0][0] = False
     horiz[h][w - 1] = False
 
-    # Conversion en lignes pour la carte graphique
     for y in range(h + 1):
         for x in range(w):
             if horiz[y][x]:

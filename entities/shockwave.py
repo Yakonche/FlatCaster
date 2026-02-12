@@ -16,7 +16,6 @@ class Shockwave:
         self.width = 15
         self.marked_for_deletion = False
 
-        # Création d'irrégularités pour faire "liquide"
         self.points_offset = [random.uniform(0.8, 1.2) for _ in range(16)]
 
     def update(self):
@@ -34,27 +33,18 @@ class Shockwave:
         current_radius = self.radius * zoom
 
         if current_radius > 0 and self.alpha > 0:
-            # Construction d'un polygone irrégulier (effet liquide)
             points = []
             num_points = len(self.points_offset)
             angle_step = (math.pi * 2) / num_points
 
             for i in range(num_points):
-                # Rotation légère avec le temps
                 angle = i * angle_step + pygame.time.get_ticks() * 0.005
-                # Rayon modifié par l'offset aléatoire
                 r = current_radius * self.points_offset[i]
 
                 px = sx + math.cos(angle) * r
                 py = sy + math.sin(angle) * r
                 points.append((px, py))
 
-            # Dessin de l'anneau
-            # Note: pygame.draw.polygon avec width > 0 ne ferme pas toujours bien les coins épais,
-            # mais pour un effet liquide rapide c'est suffisant.
-            # Pour la transparence, on a besoin d'une surface temporaire ou de couleurs RGBA directes (si supporté par draw)
-
-            # Méthode simple avec transparence simulée par l'épaisseur
             color = (0, 255, 255)
             if len(points) > 2:
                 pygame.draw.lines(surface, color, True, points, max(1, int(self.width * zoom)))
