@@ -1,6 +1,14 @@
+# Licenses
+
+This repository contains code and assets under different licenses.
+
+---
+
+## Project Source Code
+
 MIT License
 
-Copyright (c) 2026 Yakonche
+Copyright (c) 2026 [Yakonche]
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,3 +27,26 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+## Font: Jersey 10
+
+The `Jersey 10` font file(s) included in this repository are licensed under the
+**SIL Open Font License, Version 1.1**.
+
+Copyright 2023 The Soft Type Project Authors
+(https://github.com/scfried/soft-type-jersey)
+
+The full text of the SIL Open Font License 1.1 is available at:
+https://openfontlicense.org/open-font-license-official-text/
+
+### SIL Open Font License 1.1 — Summary
+
+- You may freely use, embed, and redistribute the font, including in
+  commercial projects.
+- You may modify the font, but modified versions must be released under
+  the same OFL-1.1 license and must not use the Reserved Font Name
+  "Jersey".
+- The font may not be sold as a standalone product.
+- The font is provided "as is", without warranty of any kind.
