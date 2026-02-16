@@ -1,10 +1,12 @@
 # FlatCaster
 
-## Prérequis
+> [Lire en français](README_fr.md)
 
-- [Rust](https://www.rust-lang.org/tools/install) (édition 2021, stable recommandé)
-- Un pilote GPU compatible **Vulkan**, **Metal**, **DX12** ou **DX11**
-- Windows 10/11 (build ciblant Windows avec sous-système GUI)
+## Prerequisites
+
+- [Rust](https://www.rust-lang.org/tools/install) (2021 edition, stable recommended)
+- A GPU driver compatible with **Vulkan**, **Metal**, **DX12**, or **DX11**
+- Windows 10/11 (build targeting Windows with GUI subsystem)
 
 ```
 rustup update stable
@@ -12,7 +14,7 @@ rustup update stable
 
 ---
 
-## Compilation
+## Build
 
 ### Debug
 
@@ -20,19 +22,19 @@ rustup update stable
 cargo build
 ```
 
-L'exécutable est généré dans `target/debug/FlatCaster.exe`.
+The executable is generated at `target/debug/FlatCaster.exe`.
 
-### Release (optimisée)
+### Release (optimized)
 
 ```
 cargo build --release
 ```
 
-L'exécutable est généré dans `target/release/FlatCaster.exe`.
+The executable is generated at `target/release/FlatCaster.exe`.
 
 ---
 
-## Lancer
+## Run
 
 ```
 cargo run --release
@@ -40,15 +42,15 @@ cargo run --release
 
 ---
 
-## Vérifications
+## Checks
 
-### Compiler sans exécuter
+### Compile without running
 
 ```
 cargo check
 ```
 
-### Tests unitaires
+### Unit tests
 
 ```
 cargo test
@@ -60,33 +62,33 @@ cargo test
 cargo clippy -- -D warnings
 ```
 
-### Formatage du code
+### Code formatting
 
-Vérification :
+Check:
 ```
 cargo fmt --check
 ```
 
-Application :
+Apply:
 ```
 cargo fmt
 ```
 
 ---
 
-## Dépendances notables
+## Notable dependencies
 
-| Crate | Rôle |
+| Crate | Role |
 |---|---|
-| `wgpu 22` | Rendu GPU (Vulkan / Metal / DX12 / DX11) |
-| `winit 0.30` | Fenêtre et événements |
-| `glyphon 0.6` | Rendu de texte GPU |
-| `gilrs 0.10` | Manette de jeu |
-| `winres` | Intégration de l'icône Windows (build.rs) |
+| `wgpu 22` | GPU rendering (Vulkan / Metal / DX12 / DX11) |
+| `winit 0.30` | Window and events |
+| `glyphon 0.6` | GPU text rendering |
+| `gilrs 0.10` | Gamepad support |
+| `winres` | Windows icon integration (build.rs) |
 
 ---
 
-## Licence
+## License
 
-Code source : **MIT** — voir [`LICENSE`](LICENSE)
-Police Jersey 10 : **OFL-1.1** — voir [`assets/OFL.txt`](assets/OFL.txt)
+Source code: **MIT** — see [`LICENSE`](LICENSE)
+Jersey 10 font: **OFL-1.1** — see [`assets/OFL.txt`](assets/OFL.txt)
